@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ColumnDef,
   SortingState,
@@ -65,12 +65,15 @@ type SearchResponse = {
 type InventoryRow = {
   id: string;
   family: Model["family"];
-  specs: string;
-  location: string;
-  quote: string;
+  label: string;
+  chip: string;
+  cores: string;
+  memory: string;
+  storage: string;
   availability: "AVAILABLE" | "SOLD OUT";
   available: boolean;
-  buyUrl: string;
+  stores: Store[];
+  checkable: boolean;
 };
 
 const defaultSpecFilters = {
@@ -87,6 +90,7 @@ const defaultSpecFilters = {
 
 const SAVED_ZIP_KEY = "macs-in-stock:saved-zip";
 const REFRESH_SECONDS = 60;
+type WebkitAudioWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
 
 function normalizeZip(value: string) {
   const match = value.trim().match(/^(\d{5})(?:[-\s]?\d{4})?$/);
@@ -102,9 +106,45 @@ export default function Home() {
   const [sorting, setSorting] = useState<SortingState>([{ id: "availability", desc: false }]);
   const [savedZip, setSavedZip] = useState("");
   const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_SECONDS);
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [alertIds, setAlertIds] = useState<Record<string, boolean>>({});
   const savedZipRef = useRef("");
   const loadingRef = useRef(false);
+  const soundEnabledRef = useRef(false);
+  const alertIdsRef = useRef<Record<string, boolean>>({});
+  const lastAvailabilityRef = useRef<Record<string, boolean>>({});
+  const audioContextRef = useRef<AudioContext | null>(null);
   const normalizedZip = normalizeZip(zip);
+
+  const playAlarm = useCallback(async () => {
+    const AudioContextClass = window.AudioContext ?? (window as WebkitAudioWindow).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const context = audioContextRef.current ?? new AudioContextClass();
+    audioContextRef.current = context;
+    if (context.state === "suspended") await context.resume();
+
+    const start = context.currentTime + 0.02;
+    for (let index = 0; index < 6; index += 1) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const toneStart = start + index * 0.2;
+      const toneEnd = toneStart + 0.15;
+
+      oscillator.type = index % 2 ? "sawtooth" : "square";
+      oscillator.frequency.setValueAtTime(520, toneStart);
+      oscillator.frequency.exponentialRampToValueAtTime(1180, toneEnd);
+      gain.gain.setValueAtTime(0.0001, toneStart);
+      gain.gain.exponentialRampToValueAtTime(0.18, toneStart + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, toneEnd);
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(toneStart);
+      oscillator.stop(toneEnd + 0.02);
+    }
+  }, []);
 
   const runSearch = useCallback(async (zipToSearch: string) => {
     const lookupZip = normalizeZip(zipToSearch);
@@ -133,6 +173,14 @@ export default function Home() {
   useEffect(() => {
     loadingRef.current = loading;
   }, [loading]);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    alertIdsRef.current = alertIds;
+  }, [alertIds]);
 
   useEffect(() => {
     savedZipRef.current = savedZip;
@@ -234,49 +282,100 @@ export default function Home() {
     () =>
       filteredModels.map((model) => {
         const todayStores = model.stores.filter((store) => store.availableToday);
-        const nearestStore = todayStores[0] ?? model.stores[0];
         const available = todayStores.length > 0;
 
         return {
           id: model.id,
           family: model.family,
-          specs: model.specs.join(" / "),
-          location: nearestStore
-            ? `${nearestStore.storeName}, ${nearestStore.city}, ${nearestStore.state}`
-            : model.checkable
-              ? "No same-day pickup near this ZIP"
-              : "Configurable variant",
-          quote: nearestStore?.quote ?? (model.checkable ? "No local pickup" : "No direct pickup SKU"),
+          label: [model.family, model.filters.chip, model.filters.cpuGpu, model.filters.memory, model.filters.storage]
+            .filter(Boolean)
+            .join(", "),
+          chip: model.filters.chip ?? "-",
+          cores: model.filters.cpuGpu ?? "-",
+          memory: model.filters.memory ?? "-",
+          storage: model.filters.storage ?? "-",
           availability: available ? "AVAILABLE" : "SOLD OUT",
           available,
-          buyUrl: model.buyUrl,
+          stores: model.stores.slice(0, 5),
+          checkable: model.checkable,
         };
       }),
     [filteredModels],
   );
+  useEffect(() => {
+    const nextAvailability = Object.fromEntries(inventoryRows.map((row) => [row.id, row.available]));
+
+    if (soundEnabledRef.current) {
+      for (const row of inventoryRows) {
+        if (alertIdsRef.current[row.id] && row.available && !lastAvailabilityRef.current[row.id]) {
+          void playAlarm();
+        }
+      }
+    }
+
+    lastAvailabilityRef.current = nextAvailability;
+  }, [data?.checkedAt, inventoryRows, playAlarm]);
+
+  const toggleModelAlert = useCallback(
+    async (row: InventoryRow) => {
+      const isEnabling = !alertIdsRef.current[row.id];
+      if (isEnabling) {
+        setSoundEnabled(true);
+        soundEnabledRef.current = true;
+        if (row.available) {
+          lastAvailabilityRef.current[row.id] = true;
+          void playAlarm();
+        }
+      }
+
+      setAlertIds((currentAlerts) => ({ ...currentAlerts, [row.id]: isEnabling }));
+    },
+    [playAlarm],
+  );
+
+  const toggleLocations = useCallback((rowId: string) => {
+    setExpandedRows((rows) => ({ ...rows, [rowId]: !rows[rowId] }));
+  }, []);
   const columns = useMemo<ColumnDef<InventoryRow>[]>(
     () => [
       {
         accessorKey: "family",
         header: "Model",
-        cell: ({ row }) => <span className="tableModel">{row.original.family}</span>,
+        cell: ({ row }) => (
+          <span className="modelCell">
+            <button
+              aria-label={`${alertIds[row.original.id] ? "Disable" : "Enable"} stock alert for ${row.original.label}`}
+              className={alertIds[row.original.id] ? "alarmButton active" : "alarmButton"}
+              title={`${alertIds[row.original.id] ? "Disable" : "Enable"} stock alert`}
+              type="button"
+              onClick={() => void toggleModelAlert(row.original)}
+            >
+              bell
+            </button>
+            <span className="tableModel">{row.original.family}</span>
+          </span>
+        ),
       },
       {
-        accessorKey: "specs",
-        header: "Specs",
-        cell: ({ row }) => <span className="tableSpecs">{row.original.specs}</span>,
+        accessorKey: "chip",
+        header: "Chip",
       },
       {
-        accessorKey: "location",
-        header: "Location",
+        accessorKey: "cores",
+        header: "Cores",
+        cell: ({ row }) => <span className="tableCores">{row.original.cores}</span>,
       },
       {
-        accessorKey: "quote",
-        header: "Pickup",
+        accessorKey: "memory",
+        header: "RAM",
+      },
+      {
+        accessorKey: "storage",
+        header: "Storage",
       },
       {
         accessorKey: "availability",
-        header: "Availability",
+        header: "Stock",
         sortingFn: (a, b) => Number(b.original.available) - Number(a.original.available),
         cell: ({ row }) => (
           <span className={row.original.available ? "tableStatus available" : "tableStatus soldOut"}>
@@ -284,8 +383,32 @@ export default function Home() {
           </span>
         ),
       },
+      {
+        id: "locations",
+        header: "Locations",
+        enableSorting: false,
+        cell: ({ row }) => {
+          const storeCount = row.original.stores.length;
+          const label = storeCount
+            ? `${expandedRows[row.original.id] ? "Hide" : "Show"} ${Math.min(storeCount, 5)}`
+            : row.original.checkable
+              ? "No stores"
+              : "Not checkable";
+
+          return (
+            <button
+              className="locationButton"
+              type="button"
+              disabled={!storeCount}
+              onClick={() => toggleLocations(row.original.id)}
+            >
+              {label}
+            </button>
+          );
+        },
+      },
     ],
-    [],
+    [alertIds, expandedRows, toggleLocations, toggleModelAlert],
   );
   const table = useReactTable({
     data: inventoryRows,
@@ -304,7 +427,12 @@ export default function Home() {
           <a className="brand" href="/">
             Macs In Stock
           </a>
-          <span>Live Apple pickup lookup</span>
+          <div className="navLinks">
+            <span>Live Apple pickup lookup</span>
+            <a href="https://github.com/spazman2c/MacsInStock" rel="noreferrer" target="_blank">
+              GitHub
+            </a>
+          </div>
         </nav>
 
         <div className="heroGrid">
@@ -353,6 +481,11 @@ export default function Home() {
             ) : (
               <p className="refreshStatus">Save a ZIP to refresh stock automatically every {REFRESH_SECONDS} seconds.</p>
             )}
+            <p className={soundEnabled ? "soundStatus enabled" : "soundStatus"}>
+              {soundEnabled
+                ? `Alert sounds enabled for ${Object.values(alertIds).filter(Boolean).length} model alerts.`
+                : "Click a bell beside a model to enable sound alerts while this page is open."}
+            </p>
             <p className="hint">Exact pickup checks use Apple retail part numbers. Custom specs fall back to similar standard models.</p>
           </form>
         </div>
@@ -471,7 +604,7 @@ export default function Home() {
               <p>Try removing one spec filter or search term.</p>
             </div>
           ) : (
-            <DataTable table={table} />
+            <DataTable expandedRows={expandedRows} table={table} />
           )}
           </>
         )}
@@ -480,7 +613,13 @@ export default function Home() {
   );
 }
 
-function DataTable({ table }: { table: ReturnType<typeof useReactTable<InventoryRow>> }) {
+function DataTable({
+  expandedRows,
+  table,
+}: {
+  expandedRows: Record<string, boolean>;
+  table: ReturnType<typeof useReactTable<InventoryRow>>;
+}) {
   return (
     <div className="dataTableShell">
       <table className="dataTable">
@@ -512,11 +651,35 @@ function DataTable({ table }: { table: ReturnType<typeof useReactTable<Inventory
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
-              ))}
-            </tr>
+            <Fragment key={row.id}>
+              <tr key={row.id}>
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                ))}
+              </tr>
+              {expandedRows[row.original.id] ? (
+                <tr className="locationRow" key={`${row.id}-locations`}>
+                  <td colSpan={row.getVisibleCells().length}>
+                    <div className="locationList">
+                      {row.original.stores.map((store) => (
+                        <div className="locationItem" key={`${row.original.id}-${store.storeName}`}>
+                          <div>
+                            <strong>{store.storeName}</strong>
+                            <span>
+                              {store.city}, {store.state} {store.distance ? `- ${store.distance}` : ""}
+                            </span>
+                            {store.address ? <span>{store.address}</span> : null}
+                          </div>
+                          <span className={store.availableToday ? "storeQuote availableQuote" : "storeQuote"}>
+                            {store.quote}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
           ))}
         </tbody>
       </table>

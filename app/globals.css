@@ -49,6 +49,22 @@ nav {
   margin-bottom: 72px;
 }
 
+.navLinks {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+}
+
+.navLinks a {
+  color: var(--blue);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.navLinks a:hover {
+  color: var(--blue-dark);
+}
+
 .brand {
   color: var(--text);
   font-weight: 650;
@@ -179,7 +195,8 @@ button:disabled {
 
 .hint,
 .error,
-.refreshStatus {
+.refreshStatus,
+.soundStatus {
   font-size: 13px;
   line-height: 1.4;
   margin: 12px 0 0;
@@ -191,6 +208,15 @@ button:disabled {
 
 .refreshStatus {
   color: var(--green);
+  font-weight: 650;
+}
+
+.soundStatus {
+  color: var(--muted);
+}
+
+.soundStatus.enabled {
+  color: var(--blue);
   font-weight: 650;
 }
 
@@ -398,11 +424,45 @@ select:disabled {
   white-space: nowrap;
 }
 
-.tableSpecs {
+.modelCell {
+  align-items: center;
+  display: inline-flex;
+  gap: 9px;
+  min-width: 150px;
+}
+
+.alarmButton {
+  background: #f1f1f4;
+  border: 1px solid #ddddE4;
+  color: var(--muted);
+  font-size: 0;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  width: 30px;
+}
+
+.alarmButton::before {
+  content: "🔔";
+  font-size: 15px;
+  line-height: 1;
+}
+
+.alarmButton:hover {
+  background: #e8e8ed;
+}
+
+.alarmButton.active {
+  background: #fff8e5;
+  border-color: #f1d28a;
+  color: #6f5200;
+}
+
+.tableCores {
   color: var(--text);
   display: block;
   line-height: 1.35;
-  min-width: 360px;
+  min-width: 190px;
 }
 
 .tableStatus {
@@ -425,9 +485,70 @@ select:disabled {
   color: #b42318;
 }
 
+.locationButton {
+  background: #f1f1f4;
+  color: var(--text);
+  min-height: 34px;
+}
+
+.locationButton:hover {
+  background: #e1e1e7;
+}
+
+.locationRow td {
+  background: #fbfbfd;
+  padding: 0;
+}
+
+.locationList {
+  display: grid;
+  gap: 1px;
+}
+
+.locationItem {
+  align-items: center;
+  background: #fff;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 14px 16px;
+}
+
+.locationItem div {
+  display: grid;
+  gap: 4px;
+}
+
+.locationItem strong {
+  color: var(--text);
+}
+
+.locationItem span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.storeQuote {
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.storeQuote.availableQuote {
+  color: var(--green);
+}
+
 @media (max-width: 880px) {
   nav {
+    align-items: flex-start;
+    gap: 12px;
     margin-bottom: 44px;
+  }
+
+  .navLinks {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .heroGrid,
@@ -456,5 +577,10 @@ select:disabled {
   .dataTableShell {
     margin-left: -8px;
     margin-right: -8px;
+  }
+
+  .locationItem {
+    align-items: start;
+    grid-template-columns: 1fr;
   }
 }
