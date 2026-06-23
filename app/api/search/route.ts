@@ -3,16 +3,17 @@ import { getCurrentMacCatalog, getPickupAvailability } from "@/lib/apple";
 
 export const dynamic = "force-dynamic";
 
-function isZip(value: string) {
-  return /^\d{5}$/.test(value.trim());
+function normalizeZip(value: string) {
+  const match = value.trim().match(/^(\d{5})(?:[-\s]?\d{4})?$/);
+  return match?.[1];
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const zip = searchParams.get("zip")?.trim() ?? "";
+  const zip = normalizeZip(searchParams.get("zip") ?? "");
 
-  if (!isZip(zip)) {
-    return NextResponse.json({ error: "Enter a valid 5 digit ZIP code." }, { status: 400 });
+  if (!zip) {
+    return NextResponse.json({ error: "Enter a valid US ZIP code." }, { status: 400 });
   }
 
   try {

@@ -85,6 +85,11 @@ const defaultSpecFilters = {
   query: "",
 };
 
+function normalizeZip(value: string) {
+  const match = value.trim().match(/^(\d{5})(?:[-\s]?\d{4})?$/);
+  return match?.[1] ?? "";
+}
+
 export default function Home() {
   const [zip, setZip] = useState("");
   const [specFilters, setSpecFilters] = useState(defaultSpecFilters);
@@ -92,6 +97,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: "availability", desc: false }]);
+  const normalizedZip = normalizeZip(zip);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -251,15 +257,15 @@ export default function Home() {
             <div className="searchRow">
               <input
                 id="zip"
-                inputMode="numeric"
-                maxLength={5}
-                pattern="[0-9]{5}"
-                placeholder="10001"
+                inputMode="text"
+                maxLength={10}
+                pattern="[0-9]{5}([\\-\\s]?[0-9]{4})?"
+                placeholder="10001 or 10001-1234"
                 value={zip}
-                onChange={(event) => setZip(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                onChange={(event) => setZip(event.target.value.replace(/[^\d-\s]/g, "").slice(0, 10))}
                 required
               />
-              <button type="submit" disabled={loading || zip.length !== 5}>
+              <button type="submit" disabled={loading || !normalizedZip}>
                 {loading ? "Checking" : "Check stock"}
               </button>
             </div>
@@ -367,8 +373,7 @@ export default function Home() {
           <>
           {data.availabilityError ? (
             <div className="fallbackNotice">
-              Apple did not return pickup stores for {data.zip}: {data.availabilityError} Try a nearby city ZIP, such
-              as 06604, 06605, or 06606 for Bridgeport.
+              Apple did not return pickup stores near {data.zip}: {data.availabilityError}
             </div>
           ) : null}
           {fallbackActive ? (
