@@ -667,6 +667,16 @@ export default function Home() {
           )}
           </>
         )}
+
+        <div className="refurbishedCta">
+          <div>
+            <h2>Are you looking for refurbished?</h2>
+            <p>Track Apple certified refurbished Mac inventory with filters for model, size, release year, finish, memory, and capacity.</p>
+          </div>
+          <a className="buyLink" href="/refurbished">
+            Browse refurbished
+          </a>
+        </div>
       </section>
     </main>
   );

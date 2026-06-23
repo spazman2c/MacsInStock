@@ -40,6 +40,11 @@ select {
   padding: 24px max(24px, calc((100vw - 1180px) / 2)) 56px;
 }
 
+.refurbHero {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f5f7 100%);
+  padding: 24px max(24px, calc((100vw - 1180px) / 2)) 56px;
+}
+
 nav {
   align-items: center;
   display: flex;
@@ -163,6 +168,15 @@ h1 {
   border-radius: 8px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.08);
   padding: 22px;
+}
+
+.panelLabel {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 12px;
+  text-transform: uppercase;
 }
 
 label {
@@ -412,6 +426,38 @@ select:disabled {
   padding: 14px 16px;
 }
 
+.refurbishedCta {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 26px;
+  padding: 24px;
+}
+
+.refurbishedCta h2 {
+  font-size: 26px;
+  margin: 0 0 8px;
+}
+
+.refurbishedCta p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+  max-width: 780px;
+}
+
+.refurbishedSummary {
+  margin-top: -24px;
+}
+
+.refurbishedFilterGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .dataTableShell {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -607,6 +653,47 @@ select:disabled {
   color: var(--green);
 }
 
+.refurbishedTable {
+  min-width: 1120px;
+}
+
+.refurbProduct {
+  align-items: center;
+  color: var(--text);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 54px minmax(0, 1fr);
+  min-width: 300px;
+  text-decoration: none;
+}
+
+.refurbProduct:hover strong {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.refurbProduct img {
+  border-radius: 8px;
+  height: 44px;
+  object-fit: contain;
+  width: 54px;
+}
+
+.refurbProduct span {
+  display: grid;
+  gap: 4px;
+}
+
+.refurbProduct strong {
+  color: var(--text);
+}
+
+.refurbProduct span span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 @media (max-width: 880px) {
   nav {
     align-items: flex-start;
@@ -656,5 +743,13 @@ select:disabled {
   .locationItem {
     align-items: start;
     grid-template-columns: 1fr;
+  }
+
+  .refurbishedCta {
+    grid-template-columns: 1fr;
+  }
+
+  .refurbishedFilterGrid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
 }
