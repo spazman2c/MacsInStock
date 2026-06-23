@@ -465,6 +465,142 @@ select:disabled {
   overflow-x: auto;
 }
 
+.diceDataTable {
+  display: grid;
+  gap: 12px;
+}
+
+.diceTableShell {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.diceToolbar,
+.dicePagination {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.diceToolbarMeta {
+  display: grid;
+  gap: 3px;
+}
+
+.diceToolbarMeta strong {
+  font-size: 14px;
+}
+
+.diceToolbarMeta span,
+.dicePagination span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.diceToolbarActions,
+.dicePaginationButtons {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.diceColumnHeader {
+  align-items: center;
+  background: transparent;
+  border-radius: 0;
+  color: inherit;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: flex-start;
+  min-height: auto;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.diceColumnHeader:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.diceSortIcon {
+  color: var(--blue);
+  font-size: 10px;
+}
+
+.diceViewOptions {
+  position: relative;
+}
+
+.diceViewOptions summary {
+  align-items: center;
+  background: #f1f1f4;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.diceViewOptionsMenu {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.12);
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+  padding: 10px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+}
+
+.diceViewOptionsMenu label {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 8px;
+  margin: 0;
+}
+
+.diceViewOptionsMenu input {
+  height: auto;
+}
+
+.dicePagination label {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+  margin: 0;
+}
+
+.dicePagination select {
+  height: 34px;
+}
+
+.dicePagination button {
+  min-height: 34px;
+}
+
+.diceEmptyRow {
+  color: var(--muted);
+  padding: 30px;
+  text-align: center;
+}
+
 .dataTable {
   border-collapse: collapse;
   min-width: 980px;
@@ -598,6 +734,16 @@ select:disabled {
 .tableStatus.soldOut {
   background: #fdecec;
   color: #b42318;
+}
+
+.tableStatus.unknown {
+  background: #f1f1f4;
+  color: var(--muted);
+}
+
+.tableStatus.configured {
+  background: #edf4ff;
+  color: var(--blue);
 }
 
 .locationButton {

@@ -2,6 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+  VisibilityState,
+  getCoreRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import { DataTable } from "@/components/data-table/data-table";
+import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 
 type RefurbishedMac = {
   id: string;
@@ -68,6 +80,9 @@ export default function RefurbishedPage() {
   const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_SECONDS);
   const [alertIds, setAlertIds] = useState<Record<string, boolean>>({});
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [sorting, setSorting] = useState<SortingState>([{ id: "model", desc: false }]);
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 });
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const loadingRef = useRef(false);
   const alertIdsRef = useRef<Record<string, boolean>>({});
   const knownAvailableIdsRef = useRef<Set<string>>(new Set());
@@ -189,6 +204,88 @@ export default function RefurbishedPage() {
     setAlertIds((current) => ({ ...current, [product.id]: !current[product.id] }));
     await playAlarm();
   };
+
+  const columns = useMemo<ColumnDef<RefurbishedMac>[]>(
+    () => [
+      {
+        accessorKey: "model",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Item" />,
+        cell: ({ row }) => (
+          <div className="modelCell">
+            <button
+              type="button"
+              className={alertIds[row.original.id] ? "alarmButton active" : "alarmButton"}
+              aria-label={`Sound alert for ${row.original.title}`}
+              title="Sound alert"
+              onClick={() => void toggleAlert(row.original)}
+            />
+            <a className="refurbProduct" href={row.original.url} target="_blank" rel="noreferrer">
+              {row.original.image ? <img src={row.original.image} alt="" /> : <span />}
+              <span>
+                <strong>{row.original.model}</strong>
+                <span>{row.original.chip || row.original.title}</span>
+              </span>
+            </a>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "id",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Model #" />,
+        cell: ({ row }) => <span className="partNumber">{row.original.id}</span>,
+      },
+      {
+        accessorKey: "size",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Size" />,
+        cell: ({ row }) => displayValue(row.original.size),
+      },
+      {
+        accessorKey: "releaseYear",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Release" />,
+        cell: ({ row }) => displayValue(row.original.releaseYear),
+      },
+      {
+        accessorKey: "finish",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Finish" />,
+        cell: ({ row }) => displayValue(row.original.finish),
+      },
+      {
+        accessorKey: "memory",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Memory" />,
+        cell: ({ row }) => displayValue(row.original.memory),
+      },
+      {
+        accessorKey: "capacity",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Capacity" />,
+        cell: ({ row }) => displayValue(row.original.capacity),
+      },
+      {
+        accessorKey: "price",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Price" />,
+        cell: ({ row }) => displayValue(row.original.price),
+      },
+      {
+        id: "status",
+        header: "Status",
+        cell: () => <span className="tableStatus available">Available to ship</span>,
+        enableSorting: false,
+      },
+    ],
+    [alertIds],
+  );
+
+  const table = useReactTable({
+    data: products,
+    columns,
+    state: { sorting, pagination, columnVisibility },
+    onSortingChange: setSorting,
+    onPaginationChange: setPagination,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getRowId: (row) => row.id,
+  });
 
   return (
     <>
@@ -330,57 +427,7 @@ export default function RefurbishedPage() {
             <p>Try clearing a filter, or refresh again in a minute.</p>
           </section>
         ) : (
-          <section className="dataTableShell">
-            <table className="dataTable refurbishedTable">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Model #</th>
-                  <th>Size</th>
-                  <th>Release</th>
-                  <th>Finish</th>
-                  <th>Memory</th>
-                  <th>Capacity</th>
-                  <th>Price</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product) => (
-                  <tr key={product.id}>
-                    <td>
-                      <div className="modelCell">
-                        <button
-                          type="button"
-                          className={alertIds[product.id] ? "alarmButton active" : "alarmButton"}
-                          aria-label={`Sound alert for ${product.title}`}
-                          title="Sound alert"
-                          onClick={() => void toggleAlert(product)}
-                        />
-                        <a className="refurbProduct" href={product.url} target="_blank" rel="noreferrer">
-                          {product.image ? <img src={product.image} alt="" /> : <span />}
-                          <span>
-                            <strong>{product.model}</strong>
-                            <span>{product.chip || product.title}</span>
-                          </span>
-                        </a>
-                      </div>
-                    </td>
-                    <td className="partNumber">{product.id}</td>
-                    <td>{displayValue(product.size)}</td>
-                    <td>{displayValue(product.releaseYear)}</td>
-                    <td>{displayValue(product.finish)}</td>
-                    <td>{displayValue(product.memory)}</td>
-                    <td>{displayValue(product.capacity)}</td>
-                    <td>{displayValue(product.price)}</td>
-                    <td>
-                      <span className="tableStatus available">Available to ship</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+          <DataTable label="Refurbished inventory" table={table} className="refurbishedTable" />
         )}
       </main>
     </>

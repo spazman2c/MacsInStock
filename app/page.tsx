@@ -1,14 +1,19 @@
 "use client";
 
-import { Fragment, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ColumnDef,
+  PaginationState,
+  Row,
   SortingState,
-  flexRender,
+  VisibilityState,
   getCoreRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { DataTable } from "@/components/data-table/data-table";
+import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 
 type Store = {
   storeName: string;
@@ -26,6 +31,9 @@ type Model = {
   family: "MacBook Pro" | "Mac Studio" | "Mac mini";
   id: string;
   partNumber?: string;
+  configuredPartNumber?: string;
+  optionPartNumbers?: string[];
+  availabilitySource: "exact" | "configured" | "none";
   title: string;
   price?: string;
   buyUrl: string;
@@ -72,7 +80,8 @@ type InventoryRow = {
   cores: string;
   memory: string;
   storage: string;
-  availability: "AVAILABLE" | "SOLD OUT";
+  availabilitySource: Model["availabilitySource"];
+  availability: "AVAILABLE" | "SOLD OUT" | "NO PICKUP" | "UNKNOWN";
   available: boolean;
   stores: Store[];
   checkable: boolean;
@@ -106,6 +115,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: "availability", desc: false }]);
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 });
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [savedZip, setSavedZip] = useState("");
   const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_SECONDS);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -117,6 +128,7 @@ export default function Home() {
   const soundEnabledRef = useRef(false);
   const alertIdsRef = useRef<Record<string, boolean>>({});
   const lastAvailabilityRef = useRef<Record<string, boolean>>({});
+  const loadedSavedZipRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const normalizedZip = normalizeZip(zip);
 
@@ -225,9 +237,11 @@ export default function Home() {
   }, [savedZip]);
 
   useEffect(() => {
+    if (loadedSavedZipRef.current) return;
     const storedZip = normalizeZip(window.localStorage.getItem(SAVED_ZIP_KEY) ?? "");
     if (!storedZip) return;
 
+    loadedSavedZipRef.current = true;
     setSavedZip(storedZip);
     setZip(storedZip);
     void runSearch(storedZip);
@@ -249,7 +263,8 @@ export default function Home() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void runSearch(zip);
+    const formZip = new FormData(event.currentTarget).get("zip");
+    void runSearch(typeof formZip === "string" ? formZip : zip);
   }
 
   function saveCurrentZip() {
@@ -281,11 +296,15 @@ export default function Home() {
     storage: selectedFamily ? (optionSource?.storage[selectedFamily] ?? []) : [],
   };
 
-  const { filteredModels, fallbackActive } = useMemo(() => {
+  const filteredModels = useMemo(() => {
     const models = data?.models ?? [];
-    const query = specFilters.query.trim().toLowerCase();
+    const queryTokens = specFilters.query
+      .trim()
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .filter(Boolean);
 
-    const exact = models.filter((model) => {
+    return models.filter((model) => {
       if (specFilters.family !== "All" && model.family !== specFilters.family) return false;
       if (specFilters.chip !== "All" && model.filters.chip !== specFilters.chip) return false;
       if (specFilters.cpuGpu !== "All" && model.filters.cpuGpu !== specFilters.cpuGpu) return false;
@@ -294,24 +313,9 @@ export default function Home() {
       if (specFilters.display !== "All" && model.filters.display !== specFilters.display) return false;
       if (specFilters.memory !== "All" && !model.searchableText.includes(specFilters.memory.toLowerCase())) return false;
       if (specFilters.storage !== "All" && !model.searchableText.includes(specFilters.storage.toLowerCase())) return false;
-      if (query && !model.searchableText.includes(query)) return false;
+      if (queryTokens.length && !queryTokens.every((token) => model.searchableText.includes(token))) return false;
       return true;
     });
-
-    const hasSoftSpec = specFilters.memory !== "All" || specFilters.storage !== "All" || Boolean(query);
-    if (exact.length || !hasSoftSpec) return { filteredModels: exact, fallbackActive: false };
-
-    const similar = models.filter((model) => {
-      if (specFilters.family !== "All" && model.family !== specFilters.family) return false;
-      if (specFilters.chip !== "All" && model.filters.chip !== specFilters.chip) return false;
-      if (specFilters.cpuGpu !== "All" && model.filters.cpuGpu !== specFilters.cpuGpu) return false;
-      if (specFilters.size !== "All" && model.filters.size !== specFilters.size) return false;
-      if (specFilters.finish !== "All" && model.filters.finish !== specFilters.finish) return false;
-      if (specFilters.display !== "All" && model.filters.display !== specFilters.display) return false;
-      return true;
-    });
-
-    return { filteredModels: similar, fallbackActive: similar.length > 0 };
   }, [data?.models, specFilters]);
 
   const availableTodayCount = data?.models.filter((model) => model.stores.some((store) => store.availableToday)).length ?? 0;
@@ -321,6 +325,14 @@ export default function Home() {
       filteredModels.map((model) => {
         const todayStores = model.stores.filter((store) => store.availableToday);
         const available = todayStores.length > 0;
+        const availability =
+          model.availabilitySource === "configured"
+            ? "NO PICKUP"
+            : data?.availabilityError
+            ? "UNKNOWN"
+            : available
+              ? "AVAILABLE"
+              : "SOLD OUT";
 
         return {
           id: model.id,
@@ -328,19 +340,20 @@ export default function Home() {
           label: [model.family, model.filters.chip, model.filters.cpuGpu, model.filters.memory, model.filters.storage]
             .filter(Boolean)
             .join(", "),
-          partNumber: model.partNumber ?? "Configurable",
+          partNumber: model.partNumber ?? "Configured",
+          availabilitySource: model.availabilitySource,
           buyUrl: model.buyUrl,
           chip: model.filters.chip ?? "-",
           cores: model.filters.cpuGpu ?? "-",
           memory: model.filters.memory ?? "-",
           storage: model.filters.storage ?? "-",
-          availability: available ? "AVAILABLE" : "SOLD OUT",
+          availability,
           available,
           stores: model.stores.slice(0, 5),
           checkable: model.checkable,
         };
       }),
-    [filteredModels],
+    [data?.availabilityError, filteredModels],
   );
   useEffect(() => {
     const nextAvailability = Object.fromEntries(inventoryRows.map((row) => [row.id, row.available]));
@@ -380,7 +393,7 @@ export default function Home() {
     () => [
       {
         accessorKey: "family",
-        header: "Model",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Model" />,
         cell: ({ row }) => (
           <span className="modelCell">
             <button
@@ -400,47 +413,59 @@ export default function Home() {
       },
       {
         accessorKey: "partNumber",
-        header: "Model #",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Model #" />,
         cell: ({ row }) => <span className="partNumber">{row.original.partNumber}</span>,
       },
       {
         accessorKey: "chip",
-        header: "Chip",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Chip" />,
       },
       {
         accessorKey: "cores",
-        header: "Cores",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Cores" />,
         cell: ({ row }) => <span className="tableCores">{row.original.cores}</span>,
       },
       {
         accessorKey: "memory",
-        header: "RAM",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="RAM" />,
       },
       {
         accessorKey: "storage",
-        header: "Storage",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Storage" />,
       },
       {
         accessorKey: "availability",
-        header: "Stock",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Pickup" />,
         sortingFn: (a, b) => Number(b.original.available) - Number(a.original.available),
         cell: ({ row }) => (
-          <span className={row.original.available ? "tableStatus available" : "tableStatus soldOut"}>
+          <span
+            className={
+              row.original.availability === "UNKNOWN"
+                ? "tableStatus unknown"
+                : row.original.availability === "NO PICKUP"
+                  ? "tableStatus configured"
+                : row.original.available
+                  ? "tableStatus available"
+                  : "tableStatus soldOut"
+            }
+          >
             {row.original.availability}
           </span>
         ),
       },
       {
         id: "locations",
-        header: "Locations",
+        header: "Stores",
         enableSorting: false,
         cell: ({ row }) => {
           const storeCount = row.original.stores.length;
           const label = storeCount
             ? `${expandedRows[row.original.id] ? "Hide" : "Show"} ${Math.min(storeCount, 5)}`
-            : row.original.checkable
-              ? "No stores"
-              : "Not checkable";
+              : row.original.availability === "UNKNOWN"
+                ? "Unavailable"
+              : row.original.checkable
+                ? "No stores"
+                : "No pickup";
 
           return (
             <button
@@ -460,12 +485,40 @@ export default function Home() {
   const table = useReactTable({
     data: inventoryRows,
     columns,
-    state: { sorting },
+    state: { sorting, pagination, columnVisibility },
     onSortingChange: setSorting,
+    onPaginationChange: setPagination,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getRowId: (row) => row.id,
   });
+
+  const renderLocationRow = useCallback(
+    (row: Row<InventoryRow>) =>
+      expandedRows[row.original.id] ? (
+        <tr className="locationRow" key={`${row.id}-locations`}>
+          <td colSpan={row.getVisibleCells().length}>
+            <div className="locationList">
+              {row.original.stores.map((store) => (
+                <div className="locationItem" key={`${row.original.id}-${store.storeName}`}>
+                  <div>
+                    <strong>{store.storeName}</strong>
+                    <span>
+                      {store.city}, {store.state} {store.distance ? `- ${store.distance}` : ""}
+                    </span>
+                    {store.address ? <span>{store.address}</span> : null}
+                  </div>
+                  <span className={store.availableToday ? "storeQuote availableQuote" : "storeQuote"}>{store.quote}</span>
+                </div>
+              ))}
+            </div>
+          </td>
+        </tr>
+      ) : null,
+    [expandedRows],
+  );
 
   return (
     <main>
@@ -499,8 +552,7 @@ export default function Home() {
             <p className="eyebrow">MacBook Pro, Mac Studio, and Mac mini</p>
             <h1>Find the Mac you can pick up near you.</h1>
             <p className="lede">
-              Enter a ZIP code to check current Apple Store pickup quotes for standard Mac configurations, then filter
-              by model and specs.
+              Enter a ZIP code to check current Apple Store pickup quotes, then filter by model and specs.
             </p>
           </div>
 
@@ -511,13 +563,14 @@ export default function Home() {
                 id="zip"
                 inputMode="text"
                 maxLength={10}
+                name="zip"
                 pattern="[0-9]{5}([\\-\\s]?[0-9]{4})?"
                 placeholder="10001 or 10001-1234"
                 value={zip}
                 onChange={(event) => setZip(event.target.value.replace(/[^\d-\s]/g, "").slice(0, 10))}
                 required
               />
-              <button type="submit" disabled={loading || !normalizedZip}>
+              <button type="submit" disabled={loading}>
                 {loading ? "Checking" : "Check stock"}
               </button>
             </div>
@@ -545,7 +598,7 @@ export default function Home() {
                 ? `Alert sounds enabled for ${Object.values(alertIds).filter(Boolean).length} model alerts.`
                 : "Click a bell beside a model to enable sound alerts while this page is open."}
             </p>
-            <p className="hint">Exact pickup checks use Apple retail part numbers. Custom specs fall back to similar standard models.</p>
+            <p className="hint">Available means Apple Store pickup only. Configured models link to the exact Apple build but are not counted as pickup stock without a pickup SKU.</p>
           </form>
         </div>
       </section>
@@ -558,7 +611,7 @@ export default function Home() {
           </div>
           <div>
             <span className="metric">{data ? availableTodayCount : "-"}</span>
-            <span className="metricLabel">available now</span>
+            <span className="metricLabel">pickup available now</span>
           </div>
           <div>
             <span className="metric">{data ? storeCount : "-"}</span>
@@ -651,19 +704,13 @@ export default function Home() {
               Apple did not return pickup stores near {data.zip}: {data.availabilityError}
             </div>
           ) : null}
-          {fallbackActive ? (
-            <div className="fallbackNotice">
-              No exact Apple-exposed variant matched every typed/custom spec. Showing closest variants for the selected
-              model/chip, with live stock status where Apple provides a pickup SKU.
-            </div>
-          ) : null}
           {inventoryRows.length === 0 ? (
             <div className="empty">
-              <h2>No matching pickup results.</h2>
+              <h2>No exact matching models.</h2>
               <p>Try removing one spec filter or search term.</p>
             </div>
           ) : (
-            <DataTable expandedRows={expandedRows} table={table} />
+            <DataTable label="Pickup inventory" table={table} renderSubRow={renderLocationRow} />
           )}
           </>
         )}
@@ -679,80 +726,6 @@ export default function Home() {
         </div>
       </section>
     </main>
-  );
-}
-
-function DataTable({
-  expandedRows,
-  table,
-}: {
-  expandedRows: Record<string, boolean>;
-  table: ReturnType<typeof useReactTable<InventoryRow>>;
-}) {
-  return (
-    <div className="dataTableShell">
-      <table className="dataTable">
-        <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id}>
-                  {header.isPlaceholder ? null : (
-                    <button
-                      className="tableHeaderButton"
-                      type="button"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      <span>
-                        {header.column.getIsSorted() === "asc"
-                          ? "ASC"
-                          : header.column.getIsSorted() === "desc"
-                            ? "DESC"
-                            : ""}
-                      </span>
-                    </button>
-                  )}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <Fragment key={row.id}>
-              <tr key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
-                ))}
-              </tr>
-              {expandedRows[row.original.id] ? (
-                <tr className="locationRow" key={`${row.id}-locations`}>
-                  <td colSpan={row.getVisibleCells().length}>
-                    <div className="locationList">
-                      {row.original.stores.map((store) => (
-                        <div className="locationItem" key={`${row.original.id}-${store.storeName}`}>
-                          <div>
-                            <strong>{store.storeName}</strong>
-                            <span>
-                              {store.city}, {store.state} {store.distance ? `- ${store.distance}` : ""}
-                            </span>
-                            {store.address ? <span>{store.address}</span> : null}
-                          </div>
-                          <span className={store.availableToday ? "storeQuote availableQuote" : "storeQuote"}>
-                            {store.quote}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ) : null}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

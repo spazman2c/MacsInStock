@@ -18,13 +18,21 @@ export async function GET(request: Request) {
 
   try {
     const { models, filterOptions } = await getCurrentMacCatalog();
-    const checkablePartNumbers = models
-      .map((model) => model.partNumber)
-      .filter((partNumber): partNumber is string => Boolean(partNumber));
-    const availabilityLookup = await getPickupAvailability(
-      zip,
-      checkablePartNumbers,
-    );
+    const checkablePartNumbers = [
+      ...new Set(models.map((model) => model.partNumber).filter((partNumber): partNumber is string => Boolean(partNumber))),
+    ];
+    let availabilityLookup: Awaited<ReturnType<typeof getPickupAvailability>> = {
+      results: [],
+      locationError: undefined,
+    };
+
+    try {
+      availabilityLookup = await getPickupAvailability(zip, checkablePartNumbers);
+    } catch (availabilityError) {
+      const detail = availabilityError instanceof Error ? availabilityError.message : "Apple pickup lookup failed.";
+      availabilityLookup.locationError = `Apple pickup is temporarily unavailable for this ZIP. ${detail}`;
+    }
+
     const availability = availabilityLookup.results;
 
     const storesByPart = availability.reduce<Record<string, typeof availability>>((acc, store) => {
