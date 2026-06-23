@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ColumnDef,
   SortingState,
@@ -85,6 +85,9 @@ const defaultSpecFilters = {
   query: "",
 };
 
+const SAVED_ZIP_KEY = "macs-in-stock:saved-zip";
+const REFRESH_SECONDS = 60;
+
 function normalizeZip(value: string) {
   const match = value.trim().match(/^(\d{5})(?:[-\s]?\d{4})?$/);
   return match?.[1] ?? "";
@@ -97,23 +100,85 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: "availability", desc: false }]);
+  const [savedZip, setSavedZip] = useState("");
+  const [nextRefreshIn, setNextRefreshIn] = useState(REFRESH_SECONDS);
+  const savedZipRef = useRef("");
+  const loadingRef = useRef(false);
   const normalizedZip = normalizeZip(zip);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const runSearch = useCallback(async (zipToSearch: string) => {
+    const lookupZip = normalizeZip(zipToSearch);
+    if (!lookupZip) {
+      setError("Enter a valid US ZIP code.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetch(`/api/search?zip=${encodeURIComponent(zip)}`, { cache: "no-store" });
+      const response = await fetch(`/api/search?zip=${encodeURIComponent(lookupZip)}`, { cache: "no-store" });
       const payload = (await response.json()) as SearchResponse;
       if (!response.ok) throw new Error(payload.error ?? "Search failed.");
       setData(payload);
+      setZip(lookupZip);
+      setNextRefreshIn(REFRESH_SECONDS);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Search failed.");
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  useEffect(() => {
+    savedZipRef.current = savedZip;
+  }, [savedZip]);
+
+  useEffect(() => {
+    const storedZip = normalizeZip(window.localStorage.getItem(SAVED_ZIP_KEY) ?? "");
+    if (!storedZip) return;
+
+    setSavedZip(storedZip);
+    setZip(storedZip);
+    void runSearch(storedZip);
+  }, [runSearch]);
+
+  useEffect(() => {
+    if (!savedZip) return;
+
+    const interval = window.setInterval(() => {
+      setNextRefreshIn((seconds) => {
+        if (seconds > 1) return seconds - 1;
+        if (savedZipRef.current && !loadingRef.current) void runSearch(savedZipRef.current);
+        return REFRESH_SECONDS;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [runSearch, savedZip]);
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void runSearch(zip);
+  }
+
+  function saveCurrentZip() {
+    if (!normalizedZip) return;
+    window.localStorage.setItem(SAVED_ZIP_KEY, normalizedZip);
+    setSavedZip(normalizedZip);
+    setZip(normalizedZip);
+    setNextRefreshIn(REFRESH_SECONDS);
+    void runSearch(normalizedZip);
+  }
+
+  function clearSavedZip() {
+    window.localStorage.removeItem(SAVED_ZIP_KEY);
+    setSavedZip("");
+    setNextRefreshIn(REFRESH_SECONDS);
   }
 
   const selectedFamily = specFilters.family === "All" ? undefined : specFilters.family;
@@ -269,7 +334,25 @@ export default function Home() {
                 {loading ? "Checking" : "Check stock"}
               </button>
             </div>
+            <div className="saveRow">
+              <button className="secondaryButton" type="button" disabled={!normalizedZip} onClick={saveCurrentZip}>
+                Save ZIP
+              </button>
+              {savedZip ? (
+                <button className="textButton" type="button" onClick={clearSavedZip}>
+                  Clear saved
+                </button>
+              ) : null}
+            </div>
             {error ? <p className="error">{error}</p> : null}
+            {savedZip ? (
+              <p className="refreshStatus">
+                Saved ZIP {savedZip}. Auto-refreshing stock every {REFRESH_SECONDS} seconds
+                {loading ? "." : `; next refresh in ${nextRefreshIn}s.`}
+              </p>
+            ) : (
+              <p className="refreshStatus">Save a ZIP to refresh stock automatically every {REFRESH_SECONDS} seconds.</p>
+            )}
             <p className="hint">Exact pickup checks use Apple retail part numbers. Custom specs fall back to similar standard models.</p>
           </form>
         </div>
