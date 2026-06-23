@@ -424,6 +424,22 @@ select:disabled {
   white-space: nowrap;
 }
 
+.modelLink {
+  text-decoration: none;
+}
+
+.modelLink:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.partNumber {
+  color: var(--muted);
+  font-family: "SF Mono", "Roboto Mono", Consolas, monospace;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .modelCell {
   align-items: center;
   display: inline-flex;

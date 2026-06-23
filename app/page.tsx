@@ -66,6 +66,8 @@ type InventoryRow = {
   id: string;
   family: Model["family"];
   label: string;
+  partNumber: string;
+  buyUrl: string;
   chip: string;
   cores: string;
   memory: string;
@@ -290,6 +292,8 @@ export default function Home() {
           label: [model.family, model.filters.chip, model.filters.cpuGpu, model.filters.memory, model.filters.storage]
             .filter(Boolean)
             .join(", "),
+          partNumber: model.partNumber ?? "Configurable",
+          buyUrl: model.buyUrl,
           chip: model.filters.chip ?? "-",
           cores: model.filters.cpuGpu ?? "-",
           memory: model.filters.memory ?? "-",
@@ -352,9 +356,16 @@ export default function Home() {
             >
               bell
             </button>
-            <span className="tableModel">{row.original.family}</span>
+            <a className="tableModel modelLink" href={row.original.buyUrl} rel="noreferrer" target="_blank">
+              {row.original.family}
+            </a>
           </span>
         ),
+      },
+      {
+        accessorKey: "partNumber",
+        header: "Model #",
+        cell: ({ row }) => <span className="partNumber">{row.original.partNumber}</span>,
       },
       {
         accessorKey: "chip",
