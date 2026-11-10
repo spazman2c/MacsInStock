@@ -28,7 +28,7 @@ type Store = {
 };
 
 type Model = {
-  family: "MacBook Pro" | "Mac Studio" | "Mac mini";
+  family: "MacBook Pro" | "MacBook Pro PROLED" | "Mac Studio" | "Mac mini";
   id: string;
   partNumber?: string;
   configuredPartNumber?: string;
@@ -286,7 +286,7 @@ export default function Home() {
   const optionSource = data?.filterOptions;
 
   const optionSet = {
-    families: optionSource?.families ?? ["MacBook Pro", "Mac Studio", "Mac mini"],
+    families: optionSource?.families ?? ["MacBook Pro", "MacBook Pro PROLED", "Mac Studio", "Mac mini"],
     chips: selectedFamily ? (optionSource?.chips[selectedFamily] ?? []) : [],
     cpuGpu: selectedFamily ? (optionSource?.cpuGpu[selectedFamily] ?? []) : [],
     sizes: selectedFamily ? (optionSource?.sizes[selectedFamily] ?? []) : [],
@@ -549,7 +549,7 @@ export default function Home() {
 
         <div className="heroGrid">
           <div>
-            <p className="eyebrow">MacBook Pro, Mac Studio, and Mac mini</p>
+            <p className="eyebrow">MacBook Pro, MacBook Pro PROLED, Mac Studio, and Mac mini</p>
             <h1>Find the Mac you can pick up near you.</h1>
             <p className="lede">
               Enter a ZIP code to check current Apple Store pickup quotes, then filter by model and specs.

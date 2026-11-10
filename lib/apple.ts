@@ -1,4 +1,4 @@
-export type MacFamily = "MacBook Pro" | "Mac Studio" | "Mac mini";
+export type MacFamily = "MacBook Pro" | "MacBook Pro PROLED" | "Mac Studio" | "Mac mini";
 
 export type ModelFilters = {
   chip?: string;
@@ -63,6 +63,7 @@ export type DeliveryAvailability = {
 
 const PRODUCT_PAGES: Array<{ family: MacFamily; url: string }> = [
   { family: "MacBook Pro", url: "https://www.apple.com/shop/buy-mac/macbook-pro" },
+  { family: "MacBook Pro PROLED", url: "https://www.apple.com/shop/buy-mac/macbook-pro-proled-xdr" },
   { family: "Mac Studio", url: "https://www.apple.com/shop/buy-mac/mac-studio" },
   { family: "Mac mini", url: "https://www.apple.com/shop/buy-mac/mac-mini" },
 ];
@@ -180,6 +181,12 @@ function standardMemoryFor(family: MacFamily, chip?: string, cpuGpu?: string) {
     if (chip.includes("M4 Pro")) return "24GB";
     if (chip.includes("M4 chip")) return "16GB";
   }
+  if (family === "MacBook Pro PROLED") {
+    if (chip.includes("M5 Pro")) return "24GB";
+    if (cpuGpu?.includes("32-core GPU")) return "36GB";
+    if (cpuGpu?.includes("40-core GPU")) return "48GB";
+    return undefined;
+  }
   if (family !== "MacBook Pro") return undefined;
   if (!cpuGpu) return undefined;
   if (chip.includes("M5 chip")) return "16GB";
@@ -190,6 +197,7 @@ function standardMemoryFor(family: MacFamily, chip?: string, cpuGpu?: string) {
 }
 
 function standardStorageFor(family: MacFamily, chip?: string) {
+  if (family === "MacBook Pro PROLED") return chip?.includes("Max") ? "2TB" : "1TB";
   if (family === "Mac Studio" && chip?.includes("M3 Ultra")) return "1TB";
   if (family === "MacBook Pro" && chip?.includes("M5 Max")) return "1TB";
   if (family === "MacBook Pro" || family === "Mac Studio" || family === "Mac mini") return "512GB";
@@ -200,7 +208,7 @@ function configuredPathSegment(filters: ModelFilters) {
   const pieces = [
     filters.size,
     filters.finish,
-    filters.display?.replace("display", "display"),
+    filters.display?.replace(/\bglass\b/i, "display"),
     filters.chip ? `Apple ${filters.chip}` : undefined,
     filters.cpuGpu,
     filters.memory ? `${filters.memory} memory` : undefined,
@@ -227,7 +235,18 @@ function configuredDeliveryKey(partNumber: string, optionPartNumbers: string[]) 
   return `${partNumber}${[...optionPartNumbers].sort().join("")}`;
 }
 
-function memoryOptionsFor(family: MacFamily, chip?: string) {
+// PROLED limits differ by GPU tier, even within the same chip family.
+// https://www.apple.com/macbook-pro/proled-xdr-display/specs/
+function memoryOptionsFor(family: MacFamily, chip?: string, cpuGpu?: string) {
+  if (family === "MacBook Pro PROLED") {
+    if (chip?.includes("M5 Pro")) {
+      return cpuGpu?.includes("20-core GPU") ? ["24GB", "48GB", "64GB"] : ["24GB", "48GB"];
+    }
+    if (chip?.includes("M5 Max")) {
+      return cpuGpu?.includes("40-core GPU") ? ["48GB", "64GB", "128GB"] : ["36GB"];
+    }
+    return [undefined];
+  }
   if (family !== "MacBook Pro") return [standardMemoryFor(family, chip)];
   if (!chip) return [undefined];
   if (chip.includes("M5 chip")) return ["16GB", "24GB", "32GB"];
@@ -237,6 +256,9 @@ function memoryOptionsFor(family: MacFamily, chip?: string) {
 }
 
 function storageOptionsFor(family: MacFamily, chip?: string) {
+  if (family === "MacBook Pro PROLED") {
+    return chip?.includes("Max") ? ["2TB", "4TB", "8TB", "16TB"] : ["1TB", "2TB", "4TB"];
+  }
   if (family !== "MacBook Pro") return [standardStorageFor(family, chip)];
   return ["512GB", "1TB", "2TB", "4TB", "8TB"];
 }
@@ -281,7 +303,7 @@ function coreValues(value: string) {
 function ordered(values: Array<string | undefined>, kind: keyof FilterOptions) {
   const uniqueValues = unique(values);
   const preferredFinish = ["Silver", "Space Gray", "Space Black", "Starlight", "Sky Blue", "Midnight", "Blue", "Purple", "Pink", "Orange", "Yellow", "Green"];
-  const preferredDisplay = ["Standard display", "Nano-texture display"];
+  const preferredDisplay = ["Standard display", "Standard glass", "Nano-texture display", "Nano-texture glass"];
 
   return uniqueValues.sort((a, b) => {
     if (kind === "chips") return chipRank(b) - chipRank(a) || a.localeCompare(b);
@@ -349,7 +371,7 @@ export async function getCurrentMacCatalog(): Promise<{ models: MacModel[]; filt
         const standardStorage = standardStorageFor(family, baseFilters.chip);
         const variants: MacModel[] = [];
 
-        for (const memory of memoryOptionsFor(family, baseFilters.chip)) {
+        for (const memory of memoryOptionsFor(family, baseFilters.chip, baseFilters.cpuGpu)) {
           for (const storage of storageOptionsFor(family, baseFilters.chip)) {
             const isStandardConfig = memory === standardMemory && storage === standardStorage;
             const partNumber = isStandardConfig ? (product.btrOrFdPartNumber ?? undefined) : undefined;
@@ -367,7 +389,14 @@ export async function getCurrentMacCatalog(): Promise<{ models: MacModel[]; filt
               filters.size,
             ].filter((spec): spec is string => Boolean(spec));
             const id = partNumber ?? `${family}-${product.priceKey ?? index}-${memory ?? "base"}-${storage ?? "base"}`;
-            const searchableText = [family, partNumber, configuredPartNumber, product.priceKey, ...titleSpecs].join(" ").toLowerCase();
+            const searchableText = [
+              family,
+              ...(family === "MacBook Pro PROLED" ? ["MacBook Pro with PROLED XDR Display OLED touchscreen"] : []),
+              partNumber,
+              configuredPartNumber,
+              product.priceKey,
+              ...titleSpecs,
+            ].join(" ").toLowerCase();
 
             variants.push({
               id,
