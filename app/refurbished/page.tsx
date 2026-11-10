@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Bell, BellRing } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ColumnDef,
@@ -226,7 +227,9 @@ export default function RefurbishedPage() {
               aria-label={`Sound alert for ${row.original.title}`}
               title="Sound alert"
               onClick={() => void toggleAlert(row.original)}
-            />
+            >
+              {alertIds[row.original.id] ? <BellRing aria-hidden="true" /> : <Bell aria-hidden="true" />}
+            </button>
             <a className="refurbProduct" href={row.original.url} target="_blank" rel="noreferrer">
               {row.original.image ? <img src={row.original.image} alt="" /> : <span />}
               <span>
@@ -316,7 +319,7 @@ export default function RefurbishedPage() {
               GitHub
             </a>
             <Link className="buyLink secondaryButton" href="/">
-              New Macs
+              New devices
             </Link>
           </div>
         </nav>
@@ -368,6 +371,17 @@ export default function RefurbishedPage() {
         </section>
 
         <section className="finderControls" aria-label="Refurbished filters">
+          <div className="filterHeading">
+            <div><h2>Refine your search</h2><p>Find the right refurbished Mac for you.</p></div>
+            <label className="specSearch">
+              Search refurbished specs
+              <input
+                value={filters.query}
+                onChange={(event) => updateFilter("query", event.target.value)}
+                placeholder="Try M4, 24GB, silver, MacBook Air"
+              />
+            </label>
+          </div>
           <div className="filterGrid refurbishedFilterGrid">
             <label className="selectLabel">
               Model
@@ -425,14 +439,7 @@ export default function RefurbishedPage() {
             </label>
           </div>
 
-          <label className="specSearch">
-            Search refurbished specs
-            <input
-              value={filters.query}
-              onChange={(event) => updateFilter("query", event.target.value)}
-              placeholder="Try M4, 24GB, silver, MacBook Air"
-            />
-          </label>
+
         </section>
 
         <p className="hint">Last stocked is the last time this browser observed this product available to ship, saved on this device. It is not Apple’s restock date. History starts with your checks.</p>

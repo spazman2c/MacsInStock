@@ -12,7 +12,8 @@ export function DataTablePagination<TData>({
   const pagination = table.getState().pagination;
   const pageCount = table.getPageCount();
 
-  if (!pageCount || pageCount <= 1) return null;
+  const totalRows = table.getFilteredRowModel().rows.length;
+  if (totalRows <= 10) return null;
 
   return (
     <div className="dicePagination">
@@ -20,13 +21,14 @@ export function DataTablePagination<TData>({
         Page {pagination.pageIndex + 1} of {pageCount}
       </span>
       <label>
-        Rows
+        Show
         <select value={pagination.pageSize} onChange={(event) => table.setPageSize(Number(event.target.value))}>
           {pageSizeOptions.map((pageSize) => (
             <option key={pageSize} value={pageSize}>
               {pageSize}
             </option>
           ))}
+          <option value={Math.max(totalRows, 1)}>All {totalRows}</option>
         </select>
       </label>
       <div className="dicePaginationButtons">

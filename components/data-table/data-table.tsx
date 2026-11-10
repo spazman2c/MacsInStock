@@ -2,6 +2,7 @@
 
 import { Fragment, type ReactNode } from "react";
 import { flexRender, type Row, type Table } from "@tanstack/react-table";
+import { columnLabel } from "./column-labels";
 import { DataTablePagination } from "./data-table-pagination";
 import { DataTableToolbar } from "./data-table-toolbar";
 
@@ -29,7 +30,7 @@ export function DataTable<TData>({
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} colSpan={header.colSpan}>
+                  <th key={header.id} colSpan={header.colSpan} scope="col">
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -42,7 +43,7 @@ export function DataTable<TData>({
                 <Fragment key={row.id}>
                   <tr data-selected={row.getIsSelected() || undefined}>
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                      <td key={cell.id} data-label={columnLabel(cell.column.id)}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
                     ))}
                   </tr>
                   {renderSubRow?.(row)}

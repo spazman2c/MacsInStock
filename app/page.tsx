@@ -1,5 +1,6 @@
 "use client";
 
+import { Bell, BellRing } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ColumnDef,
@@ -87,6 +88,7 @@ type InventoryRow = {
   storage: string;
   finish: string;
   carrier: string;
+  detail: string;
   availabilitySource: Model["availabilitySource"];
   availability: "AVAILABLE" | "SOLD OUT" | "NO PICKUP" | "UNKNOWN";
   available: boolean;
@@ -367,6 +369,7 @@ export default function Home() {
           storage: model.filters.storage ?? "-",
           finish: model.filters.finish ?? "-",
           carrier: model.filters.carrier ?? "-",
+          detail: [model.filters.size, model.filters.display].filter(Boolean).join(" · "),
           availability,
           available,
           stores: model.stores.slice(0, 5),
@@ -424,10 +427,11 @@ export default function Home() {
               type="button"
               onClick={() => void toggleModelAlert(row.original)}
             >
-              bell
+              {alertIds[row.original.id] ? <BellRing aria-hidden="true" /> : <Bell aria-hidden="true" />}
             </button>
             <a className="tableModel modelLink" href={row.original.buyUrl} rel="noreferrer" target="_blank">
-              {row.original.family}
+              <span>{row.original.family}</span>
+              {row.original.detail ? <span className="modelSubtitle">{row.original.detail}</span> : null}
             </a>
           </span>
         ),
@@ -563,6 +567,7 @@ export default function Home() {
             <img alt="Macs In Stock" src="/macs-in-stock-logo.png" />
           </a>
           <div className="navLinks">
+            <a className="navLink" href="/refurbished">Refurbished</a>
             <span className="viewerBadge" title="Live viewers on this server">
               <span aria-hidden="true" />
               {viewerCount ?? "-"} live
@@ -577,17 +582,17 @@ export default function Home() {
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.4 7.86 10.93.58.1.79-.25.79-.56v-2.14c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.16 1.18A10.96 10.96 0 0 1 12 6.09c.98 0 1.96.13 2.88.39 2.19-1.49 3.15-1.18 3.15-1.18.63 1.58.24 2.75.12 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.25 5.67.42.36.78 1.06.78 2.15v3.13c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
               </svg>
-              <span>spazman2c/MacsInStock</span>
+              <span>GitHub</span>
             </a>
           </div>
         </nav>
 
         <div className="heroGrid">
           <div>
-            <p className="eyebrow">MacBook Pro, MacBook Pro PROLED, Mac Studio, Mac mini, and iPhone Duo</p>
-            <h1>Find the Mac or iPhone you can pick up near you.</h1>
+            <p className="eyebrow">Apple Store availability</p>
+            <h1>Your next Mac or iPhone.<br />Ready for pickup.</h1>
             <p className="lede">
-              Enter a ZIP code to check current Apple Store pickup quotes, then filter by model and specs.
+              Find the right configuration at an Apple Store near you. Live pickup checks for Macs and iPhone Duo.
             </p>
           </div>
 
@@ -600,7 +605,7 @@ export default function Home() {
                 maxLength={10}
                 name="zip"
                 pattern="[0-9]{5}([\\-\\s]?[0-9]{4})?"
-                placeholder="10001 or 10001-1234"
+                placeholder="Enter ZIP code"
                 value={zip}
                 onChange={(event) => setZip(event.target.value.replace(/[^\d-\s]/g, "").slice(0, 10))}
                 required
@@ -622,18 +627,20 @@ export default function Home() {
             {error ? <p className="error">{error}</p> : null}
             {savedZip ? (
               <p className="refreshStatus">
-                Saved ZIP {savedZip}. Auto-refreshing stock every {REFRESH_SECONDS} seconds
-                {loading ? "." : `; next refresh in ${nextRefreshIn}s.`}
+                Saved {savedZip} · {loading ? "Refreshing…" : `Refreshes in ${nextRefreshIn}s`}
               </p>
             ) : (
-              <p className="refreshStatus">Save a ZIP to refresh stock automatically every {REFRESH_SECONDS} seconds.</p>
+              <p className="refreshStatus">Save your ZIP for automatic checks every minute.</p>
             )}
+            <details className="searchHelp">
+              <summary>Pickup &amp; stock alerts</summary>
             <p className={soundEnabled ? "soundStatus enabled" : "soundStatus"}>
               {soundEnabled
                 ? `Alert sounds enabled for ${Object.values(alertIds).filter(Boolean).length} model alerts.`
                 : "Click a bell beside a model to enable sound alerts while this page is open."}
             </p>
             <p className="hint">Available means Apple Store pickup only. Configured models link to the exact Apple build but are not counted as pickup stock without a pickup SKU.</p>
+            </details>
           </form>
         </div>
       </section>
@@ -659,6 +666,18 @@ export default function Home() {
         </div>
 
         <div className="finderControls">
+          <div className="filterHeading">
+            <div><h2>Find your configuration</h2><p>Choose a model. Fine-tune the details.</p></div>
+            <label className="specSearch" htmlFor="spec-search">
+              Search specs
+              <input
+                id="spec-search"
+                placeholder="Try 64GB, 2TB, M5 Max, Night Sky, Verizon"
+                value={specFilters.query}
+                onChange={(event) => setSpecFilters((filters) => ({ ...filters, query: event.target.value }))}
+              />
+            </label>
+          </div>
           <div className="filterGrid">
             <Select
               label="Model"
@@ -732,15 +751,7 @@ export default function Home() {
             ) : null}
           </div>
 
-          <label className="specSearch" htmlFor="spec-search">
-            Search specs
-            <input
-              id="spec-search"
-              placeholder="Try 64GB, 2TB, M5 Max, Night Sky, Verizon"
-              value={specFilters.query}
-              onChange={(event) => setSpecFilters((filters) => ({ ...filters, query: event.target.value }))}
-            />
-          </label>
+
         </div>
 
         <p className="hint">Last stocked is the last time this browser observed pickup stock near the selected ZIP, saved on this device. It is not Apple’s restock date. History starts with your checks.</p>
@@ -752,7 +763,7 @@ export default function Home() {
         ) : (
           <>
           {inventoryRows.some((row) => row.family === "iPhone Duo") ? (
-            <p className="lede">iPhone pickup quotes reflect device stock. Confirm carrier activation options on Apple’s site.</p>
+            <p className="inventoryNote">iPhone pickup quotes reflect device stock. Confirm carrier activation options on Apple’s site.</p>
           ) : null}
           {data.availabilityError ? (
             <div className="fallbackNotice">

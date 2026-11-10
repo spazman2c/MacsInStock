@@ -2,12 +2,7 @@
 
 import type { Table } from "@tanstack/react-table";
 
-function titleFromColumn(id: string) {
-  return id
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_-]/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
+import { columnLabel } from "./column-labels";
 
 export function DataTableViewOptions<TData>({ table }: { table: Table<TData> }) {
   const hideableColumns = table.getAllLeafColumns().filter((column) => column.getCanHide());
@@ -25,7 +20,7 @@ export function DataTableViewOptions<TData>({ table }: { table: Table<TData> }) 
               checked={column.getIsVisible()}
               onChange={(event) => column.toggleVisibility(event.target.checked)}
             />
-            <span>{titleFromColumn(column.id)}</span>
+            <span>{columnLabel(column.id)}</span>
           </label>
         ))}
       </div>
