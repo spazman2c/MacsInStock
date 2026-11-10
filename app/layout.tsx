@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Macs In Stock",
-  description: "Check local Apple Store pickup availability for Mac Studio and MacBook Pro.",
+  description: "Check local Apple Store pickup availability for MacBook Pro, MacBook Pro PROLED, Mac Studio, Mac mini, and iPhone Duo.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

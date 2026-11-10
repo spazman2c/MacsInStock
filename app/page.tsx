@@ -12,6 +12,8 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { LastStocked } from "@/components/last-stocked";
+import { observeStock, pickupHistoryKey } from "@/lib/stock-history";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 
@@ -28,7 +30,7 @@ type Store = {
 };
 
 type Model = {
-  family: "MacBook Pro" | "MacBook Pro PROLED" | "Mac Studio" | "Mac mini";
+  family: "MacBook Pro" | "MacBook Pro PROLED" | "Mac Studio" | "Mac mini" | "iPhone Duo";
   id: string;
   partNumber?: string;
   configuredPartNumber?: string;
@@ -46,9 +48,11 @@ type Model = {
     display?: string;
     memory?: string;
     storage?: string;
+    carrier?: string;
   };
   searchableText: string;
   checkable: boolean;
+  lastStockedAt?: string;
   stores: Store[];
 };
 
@@ -65,6 +69,7 @@ type SearchResponse = {
     displays: Record<string, string[]>;
     memory: Record<string, string[]>;
     storage: Record<string, string[]>;
+    carriers: Record<string, string[]>;
   };
   models: Model[];
   error?: string;
@@ -80,9 +85,12 @@ type InventoryRow = {
   cores: string;
   memory: string;
   storage: string;
+  finish: string;
+  carrier: string;
   availabilitySource: Model["availabilitySource"];
   availability: "AVAILABLE" | "SOLD OUT" | "NO PICKUP" | "UNKNOWN";
   available: boolean;
+  lastStockedAt?: string;
   stores: Store[];
   checkable: boolean;
 };
@@ -96,6 +104,7 @@ const defaultSpecFilters = {
   display: "All",
   memory: "All",
   storage: "All",
+  carrier: "All",
   query: "",
 };
 
@@ -175,7 +184,14 @@ export default function Home() {
       const response = await fetch(`/api/search?zip=${encodeURIComponent(lookupZip)}`, { cache: "no-store" });
       const payload = (await response.json()) as SearchResponse;
       if (!response.ok) throw new Error(payload.error ?? "Search failed.");
-      setData(payload);
+      const history = observeStock(payload.models.flatMap((model) => model.partNumber ? [{
+        key: pickupHistoryKey(payload.zip, model.partNumber),
+        available: !payload.availabilityError && model.stores.some((store) => store.availableToday),
+      }] : []), payload.checkedAt);
+      setData({ ...payload, models: payload.models.map((model) => ({
+        ...model,
+        lastStockedAt: model.partNumber ? history[pickupHistoryKey(payload.zip, model.partNumber)] : undefined,
+      })) });
       setZip(lookupZip);
       setNextRefreshIn(REFRESH_SECONDS);
     } catch (requestError) {
@@ -286,7 +302,7 @@ export default function Home() {
   const optionSource = data?.filterOptions;
 
   const optionSet = {
-    families: optionSource?.families ?? ["MacBook Pro", "MacBook Pro PROLED", "Mac Studio", "Mac mini"],
+    families: optionSource?.families ?? ["MacBook Pro", "MacBook Pro PROLED", "Mac Studio", "Mac mini", "iPhone Duo"],
     chips: selectedFamily ? (optionSource?.chips[selectedFamily] ?? []) : [],
     cpuGpu: selectedFamily ? (optionSource?.cpuGpu[selectedFamily] ?? []) : [],
     sizes: selectedFamily ? (optionSource?.sizes[selectedFamily] ?? []) : [],
@@ -294,6 +310,7 @@ export default function Home() {
     displays: selectedFamily ? (optionSource?.displays[selectedFamily] ?? []) : [],
     memory: selectedFamily ? (optionSource?.memory[selectedFamily] ?? []) : [],
     storage: selectedFamily ? (optionSource?.storage[selectedFamily] ?? []) : [],
+    carriers: selectedFamily ? (optionSource?.carriers[selectedFamily] ?? []) : [],
   };
 
   const filteredModels = useMemo(() => {
@@ -311,6 +328,7 @@ export default function Home() {
       if (specFilters.size !== "All" && model.filters.size !== specFilters.size) return false;
       if (specFilters.finish !== "All" && model.filters.finish !== specFilters.finish) return false;
       if (specFilters.display !== "All" && model.filters.display !== specFilters.display) return false;
+      if (specFilters.carrier !== "All" && model.filters.carrier !== specFilters.carrier) return false;
       if (specFilters.memory !== "All" && !model.searchableText.includes(specFilters.memory.toLowerCase())) return false;
       if (specFilters.storage !== "All" && !model.searchableText.includes(specFilters.storage.toLowerCase())) return false;
       if (queryTokens.length && !queryTokens.every((token) => model.searchableText.includes(token))) return false;
@@ -337,7 +355,7 @@ export default function Home() {
         return {
           id: model.id,
           family: model.family,
-          label: [model.family, model.filters.chip, model.filters.cpuGpu, model.filters.memory, model.filters.storage]
+          label: [model.family, model.filters.chip, model.filters.cpuGpu, model.filters.memory, model.filters.storage, model.filters.finish, model.filters.carrier]
             .filter(Boolean)
             .join(", "),
           partNumber: model.partNumber ?? "Configured",
@@ -347,10 +365,13 @@ export default function Home() {
           cores: model.filters.cpuGpu ?? "-",
           memory: model.filters.memory ?? "-",
           storage: model.filters.storage ?? "-",
+          finish: model.filters.finish ?? "-",
+          carrier: model.filters.carrier ?? "-",
           availability,
           available,
           stores: model.stores.slice(0, 5),
           checkable: model.checkable,
+          lastStockedAt: model.lastStockedAt,
         };
       }),
     [data?.availabilityError, filteredModels],
@@ -434,6 +455,14 @@ export default function Home() {
         header: ({ column }) => <DataTableColumnHeader column={column} title="Storage" />,
       },
       {
+        accessorKey: "finish",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Finish" />,
+      },
+      {
+        accessorKey: "carrier",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Carrier" />,
+      },
+      {
         accessorKey: "availability",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Pickup" />,
         sortingFn: (a, b) => Number(b.original.available) - Number(a.original.available),
@@ -452,6 +481,12 @@ export default function Home() {
             {row.original.availability}
           </span>
         ),
+      },
+      {
+        accessorKey: "lastStockedAt",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Last stocked" />,
+        sortingFn: (a, b) => Date.parse(a.original.lastStockedAt ?? "1970-01-01") - Date.parse(b.original.lastStockedAt ?? "1970-01-01"),
+        cell: ({ row }) => <LastStocked at={row.original.lastStockedAt} tracked={row.original.checkable} />,
       },
       {
         id: "locations",
@@ -549,8 +584,8 @@ export default function Home() {
 
         <div className="heroGrid">
           <div>
-            <p className="eyebrow">MacBook Pro, MacBook Pro PROLED, Mac Studio, and Mac mini</p>
-            <h1>Find the Mac you can pick up near you.</h1>
+            <p className="eyebrow">MacBook Pro, MacBook Pro PROLED, Mac Studio, Mac mini, and iPhone Duo</p>
+            <h1>Find the Mac or iPhone you can pick up near you.</h1>
             <p className="lede">
               Enter a ZIP code to check current Apple Store pickup quotes, then filter by model and specs.
             </p>
@@ -644,14 +679,14 @@ export default function Home() {
               label="CPU / GPU"
               value={specFilters.cpuGpu}
               options={["All", ...optionSet.cpuGpu]}
-              disabled={!selectedFamily}
+              disabled={!selectedFamily || !optionSet.cpuGpu.length}
               onChange={(cpuGpu) => setSpecFilters((filters) => ({ ...filters, cpuGpu }))}
             />
             <Select
               label="Memory"
               value={specFilters.memory}
               options={["All", ...optionSet.memory]}
-              disabled={!selectedFamily}
+              disabled={!selectedFamily || !optionSet.memory.length}
               onChange={(memory) => setSpecFilters((filters) => ({ ...filters, memory }))}
             />
             <Select
@@ -661,6 +696,22 @@ export default function Home() {
               disabled={!selectedFamily}
               onChange={(storage) => setSpecFilters((filters) => ({ ...filters, storage }))}
             />
+            {optionSet.finishes.length ? (
+              <Select
+                label="Finish"
+                value={specFilters.finish}
+                options={["All", ...optionSet.finishes]}
+                onChange={(finish) => setSpecFilters((filters) => ({ ...filters, finish }))}
+              />
+            ) : null}
+            {optionSet.carriers.length ? (
+              <Select
+                label="Carrier"
+                value={specFilters.carrier}
+                options={["All", ...optionSet.carriers]}
+                onChange={(carrier) => setSpecFilters((filters) => ({ ...filters, carrier }))}
+              />
+            ) : null}
             {optionSet.sizes.length ? (
               <Select
                 label="Size"
@@ -685,13 +736,14 @@ export default function Home() {
             Search specs
             <input
               id="spec-search"
-              placeholder="Try 64GB, 2TB, silver, M5 Max"
+              placeholder="Try 64GB, 2TB, M5 Max, Night Sky, Verizon"
               value={specFilters.query}
               onChange={(event) => setSpecFilters((filters) => ({ ...filters, query: event.target.value }))}
             />
           </label>
         </div>
 
+        <p className="hint">Last stocked is the last time this browser observed pickup stock near the selected ZIP, saved on this device. It is not Apple’s restock date. History starts with your checks.</p>
         {!data ? (
           <div className="empty">
             <h2>Start with a ZIP code.</h2>
@@ -699,6 +751,9 @@ export default function Home() {
           </div>
         ) : (
           <>
+          {inventoryRows.some((row) => row.family === "iPhone Duo") ? (
+            <p className="lede">iPhone pickup quotes reflect device stock. Confirm carrier activation options on Apple’s site.</p>
+          ) : null}
           {data.availabilityError ? (
             <div className="fallbackNotice">
               Apple did not return pickup stores near {data.zip}: {data.availabilityError}

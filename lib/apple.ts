@@ -1,4 +1,4 @@
-export type MacFamily = "MacBook Pro" | "MacBook Pro PROLED" | "Mac Studio" | "Mac mini";
+export type MacFamily = "MacBook Pro" | "MacBook Pro PROLED" | "Mac Studio" | "Mac mini" | "iPhone Duo";
 
 export type ModelFilters = {
   chip?: string;
@@ -8,6 +8,7 @@ export type ModelFilters = {
   display?: string;
   memory?: string;
   storage?: string;
+  carrier?: string;
 };
 
 export type MacModel = {
@@ -36,6 +37,7 @@ export type FilterOptions = {
   displays: Record<string, string[]>;
   memory: Record<string, string[]>;
   storage: Record<string, string[]>;
+  carriers: Record<string, string[]>;
 };
 
 export type StoreAvailability = {
@@ -66,6 +68,7 @@ const PRODUCT_PAGES: Array<{ family: MacFamily; url: string }> = [
   { family: "MacBook Pro PROLED", url: "https://www.apple.com/shop/buy-mac/macbook-pro-proled-xdr" },
   { family: "Mac Studio", url: "https://www.apple.com/shop/buy-mac/mac-studio" },
   { family: "Mac mini", url: "https://www.apple.com/shop/buy-mac/mac-mini" },
+  { family: "iPhone Duo", url: "https://www.apple.com/shop/buy-iphone/iphone-duo" },
 ];
 
 const HEADERS = {
@@ -89,6 +92,55 @@ type ProductSelectionData = {
   mainDisplayValues?: Record<string, Record<string, { header?: string } | unknown>>;
   configDisplayValues?: Record<string, Record<string, { header?: string } | string[] | unknown>>;
 };
+
+type IPhoneSelectionData = {
+  products: Array<{
+    partNumber: string;
+    dimensionColor: string;
+    dimensionCapacity: string;
+    carrierModel: string;
+    seoUrlToken: string;
+    fullPrice?: string;
+    comingSoon?: boolean;
+  }>;
+  displayValues: {
+    dimensionColor: Record<string, { value?: string }>;
+    carrierPolicyPart: Record<string, { value?: string; carrierPolicyType?: string }>;
+    prices?: Record<string, { currentPrice?: { amount?: string } }>;
+  };
+};
+
+function iphoneModelsFromPage(html: string, url: string): MacModel[] {
+  const data = JSON.parse(extractBalancedObject(html, "productSelectionData:")) as IPhoneSelectionData;
+  return data.products.filter((product) => !product.comingSoon).map((product) => {
+    const carrierPolicy = data.displayValues.carrierPolicyPart[product.carrierModel];
+    const filters: ModelFilters = {
+      chip: "A20 Pro chip",
+      size: "7.6-inch",
+      finish: cleanHtml(data.displayValues.dimensionColor[product.dimensionColor]?.value ?? product.dimensionColor),
+      storage: product.dimensionCapacity.toUpperCase(),
+      carrier: carrierPolicy?.carrierPolicyType === "UNLOCKED"
+        ? "Connect to a carrier later"
+        : cleanHtml(carrierPolicy?.value ?? product.carrierModel),
+    };
+    const specs = [filters.finish, filters.storage, filters.carrier, filters.chip, filters.size]
+      .filter((value): value is string => Boolean(value));
+    return {
+      family: "iPhone Duo",
+      // Apple shares a hardware part number across carrier purchase options.
+      id: `${product.partNumber}-${product.carrierModel}`,
+      partNumber: product.partNumber,
+      availabilitySource: "exact",
+      title: `iPhone Duo ${specs.join(", ")}`,
+      price: product.fullPrice ? data.displayValues.prices?.[product.fullPrice]?.currentPrice?.amount : undefined,
+      buyUrl: `${url}/${product.seoUrlToken}`,
+      specs,
+      filters,
+      searchableText: ["iPhone Duo", product.partNumber, product.seoUrlToken, ...specs].join(" ").toLowerCase(),
+      checkable: true,
+    };
+  });
+}
 
 function extractBalancedObject(source: string, marker: string) {
   const markerIndex = source.indexOf(marker);
@@ -360,6 +412,7 @@ export async function getCurrentMacCatalog(): Promise<{ models: MacModel[]; filt
   );
 
   const models = pages.flatMap(({ family, url, html }) => {
+    if (family === "iPhone Duo") return iphoneModelsFromPage(html, url);
     const data = JSON.parse(extractBalancedObject(html, "productSelectionData:")) as ProductSelectionData;
 
     return data.products
@@ -433,6 +486,7 @@ export async function getCurrentMacCatalog(): Promise<{ models: MacModel[]; filt
       acc.displays[family] ??= [];
       acc.memory[family] ??= [];
       acc.storage[family] ??= [];
+      acc.carriers[family] ??= [];
       pushOption(acc.chips[family], model.filters.chip);
       pushOption(acc.cpuGpu[family], model.filters.cpuGpu);
       pushOption(acc.sizes[family], model.filters.size);
@@ -440,6 +494,7 @@ export async function getCurrentMacCatalog(): Promise<{ models: MacModel[]; filt
       pushOption(acc.displays[family], model.filters.display);
       pushOption(acc.memory[family], model.filters.memory);
       pushOption(acc.storage[family], model.filters.storage);
+      pushOption(acc.carriers[family], model.filters.carrier);
       return acc;
     },
     {
@@ -451,6 +506,7 @@ export async function getCurrentMacCatalog(): Promise<{ models: MacModel[]; filt
       displays: {},
       memory: {},
       storage: {},
+      carriers: {},
     },
   );
 
@@ -458,6 +514,7 @@ export async function getCurrentMacCatalog(): Promise<{ models: MacModel[]; filt
     models,
     filterOptions: {
       ...options,
+      carriers: Object.fromEntries(Object.entries(options.carriers).map(([family, values]) => [family, ordered(values, "carriers")])),
       chips: Object.fromEntries(Object.entries(options.chips).map(([family, values]) => [family, ordered(values, "chips")])),
       cpuGpu: Object.fromEntries(Object.entries(options.cpuGpu).map(([family, values]) => [family, ordered(values, "cpuGpu")])),
       sizes: Object.fromEntries(Object.entries(options.sizes).map(([family, values]) => [family, ordered(values, "sizes")])),

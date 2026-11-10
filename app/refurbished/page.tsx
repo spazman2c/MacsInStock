@@ -12,6 +12,8 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { LastStocked } from "@/components/last-stocked";
+import { observeStock, refurbishedHistoryKey } from "@/lib/stock-history";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 
@@ -29,6 +31,7 @@ type RefurbishedMac = {
   url: string;
   image?: string;
   searchableText: string;
+  lastStockedAt?: string;
 };
 
 type RefurbishedResponse = {
@@ -127,7 +130,12 @@ export default function RefurbishedPage() {
 
       if (!response.ok || payload.error) throw new Error(payload.error || "Apple refurbished lookup failed.");
 
-      setData(payload);
+      const history = observeStock(payload.products.map((product) => ({
+        key: refurbishedHistoryKey(product.id), available: true,
+      })), payload.checkedAt);
+      setData({ ...payload, products: payload.products.map((product) => ({
+        ...product, lastStockedAt: history[refurbishedHistoryKey(product.id)],
+      })) });
       setNextRefreshIn(REFRESH_SECONDS);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Apple refurbished lookup failed.");
@@ -263,6 +271,12 @@ export default function RefurbishedPage() {
         accessorKey: "price",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Price" />,
         cell: ({ row }) => displayValue(row.original.price),
+      },
+      {
+        accessorKey: "lastStockedAt",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Last stocked" />,
+        sortingFn: (a, b) => Date.parse(a.original.lastStockedAt ?? "1970-01-01") - Date.parse(b.original.lastStockedAt ?? "1970-01-01"),
+        cell: ({ row }) => <LastStocked at={row.original.lastStockedAt} />,
       },
       {
         id: "status",
@@ -421,6 +435,7 @@ export default function RefurbishedPage() {
           </label>
         </section>
 
+        <p className="hint">Last stocked is the last time this browser observed this product available to ship, saved on this device. It is not Apple’s restock date. History starts with your checks.</p>
         {!loading && !products.length ? (
           <section className="empty">
             <h2>No refurbished Macs found.</h2>
